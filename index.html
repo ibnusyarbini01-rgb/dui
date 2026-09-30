@@ -2783,16 +2783,73 @@
       });
     }
 
-    function stopScanner() {
-      if (html5QrCodeScanner) {
-        html5QrCodeScanner.stop().then(() => {
-          html5QrCodeScanner.clear();
-          showToast("Kamera Scan Dihentikan.");
-        }).catch(err => {
-          console.warn("Failed to clear scanner. ", err);
-        });
-      }
+    let html5QrCode = null;
+let currentCameraId = null;
+
+async function startScanner() {
+  const readerEl = document.getElementById("qr-reader-container");
+  readerEl.innerHTML = `<div id="reader" style="width:100%"></div>`;
+
+  html5QrCode = new Html5Qrcode("reader");
+
+  try {
+    // Dapatkan daftar kamera
+    const cameras = await Html5Qrcode.getCameras();
+    if (cameras && cameras.length) {
+      // Coba pakai kamera belakang dulu, kalau gak ada pakai yang pertama (laptop)
+      let cam = cameras.find(c => c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("environment"));
+      if (!cam) cam = cameras[cameras.length - 1]; // biasanya belakang di akhir
+      if (!cam) cam = cameras[0]; // fallback laptop = kamera depan
+
+      currentCameraId = cam.id;
+
+      await html5QrCode.start(
+        currentCameraId,
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess,
+        (err) => {}
+      );
+
+      showToast(`Kamera aktif: ${cam.label}`, "success");
+
+    } else {
+      // Fallback kalau getCameras gagal (di laptop lama)
+      await html5QrCode.start(
+        { facingMode: "user" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      );
     }
+  } catch (err) {
+    console.log(err);
+    // Coba lagi pakai user (depan) kalau environment gagal
+    try {
+      await html5QrCode.start(
+        { facingMode: "user" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      );
+    } catch (e) {
+      alert("Kamera tidak bisa diakses: " + e);
+    }
+  }
+}
+
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      document.getElementById("qr-reader-container").innerHTML = "";
+      showToast("Scanner dihentikan", "info");
+    }).catch(err => console.log(err));
+  }
+}
+
+function onScanSuccess(decodedText) {
+  // ini tetap pakai fungsi be'en yang lama
+  let idGuru = decodedText.trim();
+  prosesAbsensiRapat(idGuru);
+}
 
     async function onScanSuccess(decodedText, decodedResult) {
       const cleanedId = decodedText.trim();
